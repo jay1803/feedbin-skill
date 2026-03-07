@@ -124,10 +124,25 @@ def _fetch_entry_ids(client: Any, *, starred: bool, max_limit: int, explicit_ids
 def _fetch_entries(client: Any, entry_ids: list[int]) -> list[dict]:
     if not entry_ids:
         return []
-    payload = client.request("GET", "entries.json", params={"ids": ",".join(str(i) for i in entry_ids)})
+    payload = client.request(
+        "GET",
+        "entries.json",
+        params={
+            "ids": ",".join(str(i) for i in entry_ids),
+            "mode": "extended",
+            "include_enclosure": "true",
+        },
+    )
     if not isinstance(payload, list):
         return []
     return [entry for entry in payload if isinstance(entry, dict)]
+
+
+def _summarize_error(exc: Exception, *, limit: int = 180) -> str:
+    text = str(exc).replace("\n", " ").strip()
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit].rstrip()}..."
 
 
 def _fetch_feeds(client: Any, entries: list[dict]) -> dict[int, dict]:
@@ -137,17 +152,42 @@ def _fetch_feeds(client: Any, entries: list[dict]) -> dict[int, dict]:
         if isinstance(feed_id, int):
             feed_ids.append(feed_id)
 
-    if not feed_ids:
-        return {}
-
-    payload = client.request("GET", "feeds.json", params={"ids": ",".join(str(i) for i in sorted(set(feed_ids)))})
-    if not isinstance(payload, list):
+    unique_feed_ids = sorted(set(feed_ids))
+    if not unique_feed_ids:
         return {}
 
     feeds: dict[int, dict] = {}
-    for item in payload:
+
+    # Feedbin does not reliably support feeds.json?ids=..., so this may 404.
+    # Treat feed metadata as best-effort and continue with per-feed fallbacks.
+    try:
+        payload = client.request("GET", "feeds.json", params={"ids": ",".join(str(i) for i in unique_feed_ids)})
+    except Exception as exc:  # noqa: BLE001 - keep archive pull resilient to metadata errors
+        log(
+            "Feed metadata bulk fetch failed at /feeds.json?ids=... "
+            f"({_summarize_error(exc)}); falling back to per-feed requests"
+        )
+        payload = None
+
+    if isinstance(payload, list):
+        for item in payload:
+            if isinstance(item, dict) and isinstance(item.get("id"), int):
+                feeds[item["id"]] = item
+
+    missing_ids = [feed_id for feed_id in unique_feed_ids if feed_id not in feeds]
+    for feed_id in missing_ids:
+        try:
+            item = client.request("GET", f"feeds/{feed_id}.json")
+        except Exception as exc:  # noqa: BLE001 - metadata is optional for archive output
+            log(
+                f"Feed metadata unavailable at /feeds/{feed_id}.json "
+                f"({_summarize_error(exc)}); using fallback feed title"
+            )
+            continue
+
         if isinstance(item, dict) and isinstance(item.get("id"), int):
             feeds[item["id"]] = item
+
     return feeds
 
 
