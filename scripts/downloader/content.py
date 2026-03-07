@@ -17,6 +17,8 @@ VIDEO_HOSTS = {
     "youtube-nocookie.com",
 }
 
+AUDIO_EXTENSIONS = {".mp3", ".m4a", ".aac", ".ogg", ".wav", ".flac"}
+
 
 def is_video_url(url: str) -> bool:
     if not url:
@@ -25,6 +27,50 @@ def is_video_url(url: str) -> bool:
     if hostname.startswith("www."):
         hostname = hostname[4:]
     return hostname in VIDEO_HOSTS
+
+
+def is_audio_url(url: str) -> bool:
+    if not url:
+        return False
+    path = urlparse(url).path.lower()
+    return any(path.endswith(ext) for ext in AUDIO_EXTENSIONS)
+
+
+def extract_audio_url(entry: dict) -> str | None:
+    candidates: list[str] = []
+
+    enclosure_url = entry.get("enclosure_url")
+    if isinstance(enclosure_url, str) and enclosure_url.strip():
+        candidates.append(enclosure_url.strip())
+
+    enclosure = entry.get("enclosure")
+    if isinstance(enclosure, dict):
+        for key in ("url", "enclosure_url", "href"):
+            value = enclosure.get(key)
+            if isinstance(value, str) and value.strip():
+                candidates.append(value.strip())
+        mime = str(enclosure.get("type") or "").lower()
+        if mime.startswith("audio/"):
+            for candidate in candidates:
+                if candidate:
+                    return candidate
+
+    entry_url = entry.get("url")
+    if isinstance(entry_url, str) and entry_url.strip():
+        candidates.append(entry_url.strip())
+
+    html_blob = " ".join(
+        str(entry.get(key) or "")
+        for key in ("content", "summary")
+    )
+    if html_blob:
+        for match in re.findall(r"https?://[^\s\"'<>]+", html_blob):
+            candidates.append(match)
+
+    for candidate in candidates:
+        if is_audio_url(candidate):
+            return candidate
+    return None
 
 
 def slugify(value: str, fallback: str, max_length: int = 80) -> str:

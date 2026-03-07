@@ -47,6 +47,28 @@ def fetch_extracted_content(client: Any, extracted_url: str) -> str | None:
     return None
 
 
+def download_binary_content(client: Any, media_url: str) -> bytes | None:
+    if not media_url:
+        return None
+
+    req = urllib.request.Request(
+        url=media_url,
+        method="GET",
+        headers={
+            "Authorization": client._auth_header(),
+            "User-Agent": "feedbin-cli/0.3",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=client.config.timeout_sec) as response:
+            blob = response.read()
+        return blob or None
+    except (urllib.error.URLError, urllib.error.HTTPError, ValueError) as exc:
+        log(f"Failed to download media from {media_url}: {exc}")
+        return None
+
+
 def _fetch_entry_ids(client: Any, *, starred: bool, max_limit: int) -> list[int]:
     path = "starred_entries.json" if starred else "unread_entries.json"
     payload = client.request("GET", path)
@@ -124,6 +146,7 @@ def run_pull(client: Any, args: Any) -> int:
         blacklist_ids,
         blacklist_titles,
         fetch_extracted=lambda url: fetch_extracted_content(client, url),
+        download_binary=lambda url: download_binary_content(client, url),
         log=log,
         video_ref_only=bool(args.org_roam),
     )

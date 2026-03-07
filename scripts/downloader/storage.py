@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from .content import build_article_content, is_video_url, slugify
+from .content import build_article_content, extract_audio_url, is_video_url, slugify
 
 
 def read_blacklist(path: Path | None) -> tuple[set[int], set[str]]:
@@ -38,6 +38,18 @@ def ensure_unique_path(directory: Path, base_name: str) -> Path:
     return target
 
 
+def ensure_unique_file_path(directory: Path, base_name: str, extension: str) -> Path:
+    ext = extension if extension.startswith(".") else f".{extension}"
+    candidate = base_name
+    counter = 1
+    target = directory / f"{candidate}{ext}"
+    while target.exists():
+        counter += 1
+        candidate = f"{base_name}-{counter}"
+        target = directory / f"{candidate}{ext}"
+    return target
+
+
 def process_entries(
     entries: list[dict],
     feeds: dict[int, dict],
@@ -46,6 +58,7 @@ def process_entries(
     blacklist_titles: set[str],
     *,
     fetch_extracted: Callable[[str], str | None] | None = None,
+    download_binary: Callable[[str], bytes | None] | None = None,
     log: Callable[[str], None],
     video_ref_only: bool = False,
 ) -> tuple[list[int], dict[int, Path | None]]:
@@ -80,6 +93,31 @@ def process_entries(
 
         title = str(entry.get("title") or f"Entry {entry_id}")
         base_name = slugify(title, f"entry-{entry_id}")
+
+        audio_url = extract_audio_url(entry)
+        if audio_url:
+            existing_audio = list(directory.glob(f"{base_name}*.mp3"))
+            if existing_audio:
+                log(f"Using existing podcast file for entry {entry_id}: {existing_audio[0]}")
+                processed.append(entry_id)
+                markdown_files[entry_id] = None
+                continue
+
+            if download_binary is None:
+                log(f"Skipping podcast entry {entry_id}; no binary downloader available: {audio_url}")
+                continue
+
+            audio_bytes = download_binary(audio_url)
+            if not audio_bytes:
+                log(f"Failed to download podcast audio for entry {entry_id}: {audio_url}")
+                continue
+
+            audio_target = ensure_unique_file_path(directory, base_name, ".mp3")
+            audio_target.write_bytes(audio_bytes)
+            log(f"Saved podcast entry {entry_id} -> {audio_target}")
+            processed.append(entry_id)
+            markdown_files[entry_id] = None
+            continue
 
         existing = list(directory.glob(f"{base_name}*.md"))
         if existing:
