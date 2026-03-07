@@ -229,7 +229,12 @@ def load_env_file(path: str) -> None:
 
 
 def autoload_env() -> None:
-    candidates = [Path.cwd() / ".env", Path.home() / ".env"]
+    script_dir = Path(__file__).resolve().parent
+    candidates = [
+        script_dir / ".env",  # same folder as this script
+        Path.cwd() / ".env",  # current working directory
+        Path.home() / ".env",  # user home fallback
+    ]
     seen: set[str] = set()
     for candidate in candidates:
         key = str(candidate.resolve()) if candidate.exists() else str(candidate)

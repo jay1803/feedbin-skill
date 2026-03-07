@@ -18,9 +18,19 @@ Terminal-friendly OpenClaw skill for deterministic Feedbin workflows.
 ## Quick start
 
 1. Install this skill in your OpenClaw skills directory.
-2. Export Feedbin credentials (`FEEDBIN_EMAIL`, `FEEDBIN_PASSWORD`) or provide `--env-file`.
+2. Copy `.env.example` to `.env` and fill in your Feedbin credentials.
 3. Run standard Feedbin commands or archive workflows from `scripts/feedbin_cli.py`.
 4. For full command guidance and constraints, read [`SKILL.md`](./SKILL.md).
+
+### Environment loading (default)
+
+By default, the CLI auto-loads environment variables from:
+
+1. `scripts/.env` (same folder as `feedbin_cli.py`)
+2. `./.env` (current working directory)
+3. `~/.env` (home fallback)
+
+You can override with `--env-file /path/to/.env`.
 
 ## Archive workflow examples
 
