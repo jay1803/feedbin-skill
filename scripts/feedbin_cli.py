@@ -644,7 +644,52 @@ def cmd_saved_searches_remove(client: FeedbinClient, args: argparse.Namespace) -
     return 0
 
 
+def _env_flag_true(name: str) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _apply_archive_pull_legacy_env_defaults(args: argparse.Namespace) -> None:
+    if args.output is None:
+        env_output = os.getenv("FEEDBIN_OUTPUT", "").strip()
+        args.output = env_output or "output"
+
+    if args.max is None:
+        env_max = os.getenv("FEEDBIN_MAX", "").strip()
+        if env_max:
+            try:
+                args.max = int(env_max)
+            except ValueError as exc:
+                raise CliError("FEEDBIN_MAX must be an integer when used as archive pull default.") from exc
+        else:
+            args.max = 100
+
+    if args.blacklist is None:
+        env_blacklist = os.getenv("FEEDBIN_BLACKLIST", "").strip()
+        if env_blacklist:
+            args.blacklist = env_blacklist
+
+    if args.org_roam is None:
+        env_org_roam = os.getenv("FEEDBIN_ORG_ROAM", "").strip()
+        if env_org_roam:
+            args.org_roam = env_org_roam
+
+    if args.reading_index is None:
+        env_reading_index = os.getenv("FEEDBIN_READING_INDEX", "").strip()
+        if env_reading_index:
+            args.reading_index = env_reading_index
+
+    if args.starred is None:
+        args.starred = _env_flag_true("FEEDBIN_STARRED")
+
+    if args.unstar is None:
+        args.unstar = _env_flag_true("FEEDBIN_UNSTAR")
+
+
 def cmd_archive_pull(client: FeedbinClient, args: argparse.Namespace) -> int:
+    _apply_archive_pull_legacy_env_defaults(args)
     return archive_workflow.run_pull(client, args)
 
 
@@ -840,18 +885,20 @@ def build_parser() -> argparse.ArgumentParser:
     archive_sub = archive.add_subparsers(dest="action", required=True)
 
     archive_pull = archive_sub.add_parser("pull", help="Download unread or starred entries and archive them")
-    archive_pull.add_argument("--output", default="output", help="Directory to store downloaded markdown")
+    archive_pull.add_argument("--output", default=None, help="Directory to store downloaded markdown")
     archive_pull.add_argument("--blacklist", help="Optional blacklist file (feed IDs or feed titles)")
     archive_pull.add_argument("--ids", help="Comma-separated entry IDs to archive directly (bypasses unread/starred fetch)")
-    archive_pull.add_argument("--max", type=int, default=100, help="Maximum entries to download (capped at 100)")
+    archive_pull.add_argument("--max", type=int, default=None, help="Maximum entries to download (capped at 100)")
     archive_pull.add_argument(
         "--starred",
         action="store_true",
+        default=None,
         help="Download starred entries instead of unread entries",
     )
     archive_pull.add_argument(
         "--unstar",
         action="store_true",
+        default=None,
         help="Remove stars after successful archive pull (only with --starred)",
     )
     archive_pull.add_argument(

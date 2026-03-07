@@ -32,6 +32,20 @@ By default, the CLI auto-loads environment variables from:
 
 You can override with `--env-file /path/to/.env`.
 
+### Legacy feedbin-script archive env compatibility
+
+`archive pull` supports legacy env defaults when equivalent CLI flags are omitted:
+
+- `FEEDBIN_OUTPUT` → `--output`
+- `FEEDBIN_MAX` → `--max`
+- `FEEDBIN_BLACKLIST` → `--blacklist`
+- `FEEDBIN_STARRED=true` → `--starred`
+- `FEEDBIN_UNSTAR=true` → `--unstar`
+- `FEEDBIN_ORG_ROAM` → `--org-roam`
+- `FEEDBIN_READING_INDEX` → `--reading-index`
+
+CLI flags always take precedence over env defaults.
+
 ## Archive workflow examples
 
 ```bash

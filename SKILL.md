@@ -37,6 +37,20 @@ Run a credential check first:
 python3 "$FEEDBIN_CLI" auth check
 ```
 
+## Legacy feedbin-script archive env compatibility
+
+For `archive pull`, legacy env vars are accepted as defaults when matching CLI flags are not provided:
+
+- `FEEDBIN_OUTPUT` → `--output`
+- `FEEDBIN_MAX` → `--max`
+- `FEEDBIN_BLACKLIST` → `--blacklist`
+- `FEEDBIN_STARRED=true` → `--starred`
+- `FEEDBIN_UNSTAR=true` → `--unstar`
+- `FEEDBIN_ORG_ROAM` → `--org-roam`
+- `FEEDBIN_READING_INDEX` → `--reading-index`
+
+CLI flags always win over env defaults.
+
 ## Common API workflows
 
 ### List and inspect entries
