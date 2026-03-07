@@ -63,7 +63,7 @@ def process_entries(
     video_ref_only: bool = False,
 ) -> tuple[list[int], dict[int, Path | None]]:
     processed: list[int] = []
-    markdown_files: dict[int, Path | None] = {}
+    entry_files: dict[int, Path | None] = {}
 
     for entry in entries:
         entry_id = entry.get("id")
@@ -85,7 +85,7 @@ def process_entries(
         if video_ref_only and is_video_url(url):
             log(f"Skipping markdown download for video entry {entry_id}: {url}")
             processed.append(entry_id)
-            markdown_files[entry_id] = None
+            entry_files[entry_id] = None
             continue
 
         directory = output_dir / slugify(str(feed_title), f"feed-{feed_id or 'unknown'}")
@@ -100,7 +100,7 @@ def process_entries(
             if existing_audio:
                 log(f"Using existing podcast file for entry {entry_id}: {existing_audio[0]}")
                 processed.append(entry_id)
-                markdown_files[entry_id] = None
+                entry_files[entry_id] = existing_audio[0]
                 continue
 
             if download_binary is None:
@@ -116,7 +116,7 @@ def process_entries(
             audio_target.write_bytes(audio_bytes)
             log(f"Saved podcast entry {entry_id} -> {audio_target}")
             processed.append(entry_id)
-            markdown_files[entry_id] = None
+            entry_files[entry_id] = audio_target
             continue
 
         existing = list(directory.glob(f"{base_name}*.md"))
@@ -124,7 +124,7 @@ def process_entries(
             target_path = existing[0]
             log(f"Using existing file for entry {entry_id}: {target_path}")
             processed.append(entry_id)
-            markdown_files[entry_id] = target_path
+            entry_files[entry_id] = target_path
             continue
 
         target_path = ensure_unique_path(directory, base_name)
@@ -141,6 +141,6 @@ def process_entries(
         log(f"Saved entry {entry_id} -> {target_path}")
 
         processed.append(entry_id)
-        markdown_files[entry_id] = target_path
+        entry_files[entry_id] = target_path
 
-    return processed, markdown_files
+    return processed, entry_files

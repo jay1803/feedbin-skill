@@ -111,7 +111,7 @@ python3 "$FEEDBIN_CLI" archive continue-org-roam --output ~/Downloads/feedbin --
 
 Behavior:
 
-- `--org-roam` creates `.org` ref files and moves markdown to org-roam attachment paths.
+- `--org-roam` creates `.org` ref files and moves markdown + podcast `.mp3` files to org-roam attachment paths.
 - Supported video URLs (e.g., YouTube) become ref-only org files when `--org-roam` is enabled.
 - `continue-org-roam` imports previously downloaded markdown files without contacting Feedbin.
 

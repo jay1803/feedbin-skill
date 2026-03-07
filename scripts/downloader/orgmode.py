@@ -139,12 +139,15 @@ def move_with_retry(src: Path, dst: Path, retries: int = 3, base_delay: float = 
         raise last_err
 
 
-def move_markdown_to_attachment(markdown_file: Path, org_roam_dir: Path, file_uuid: str, log: Callable[[str], None]) -> Path:
+def move_file_to_attachment(source_file: Path, org_roam_dir: Path, file_uuid: str, log: Callable[[str], None]) -> Path:
     attachment_dir = create_attachment_path(org_roam_dir, file_uuid)
     ensure_dir_with_retry(attachment_dir)
-    attachment_file = attachment_dir / markdown_file.name
-    move_with_retry(markdown_file, attachment_file)
-    log(f"Moved {markdown_file} -> {attachment_file}")
+    attachment_file = attachment_dir / source_file.name
+    move_with_retry(source_file, attachment_file)
+    if source_file.suffix.lower() == ".mp3":
+        log(f"Moved podcast mp3 {source_file} -> {attachment_file}")
+    else:
+        log(f"Moved {source_file} -> {attachment_file}")
     return attachment_file
 
 
@@ -208,7 +211,7 @@ def continue_orgmode_import(
         attachment_file = None
 
         try:
-            attachment_file = move_markdown_to_attachment(markdown_file, org_roam_dir, file_uuid, log)
+            attachment_file = move_file_to_attachment(markdown_file, org_roam_dir, file_uuid, log)
             org_file_path.write_text(create_org_content(title, url, file_uuid), encoding="utf-8")
             log(f"Created org-roam file: {org_file_path}")
 
@@ -232,7 +235,7 @@ def continue_orgmode_import(
 def integrate_with_orgmode(
     entries: list[dict],
     feeds: dict[int, dict],
-    markdown_files: dict[int, Path | None],
+    entry_files: dict[int, Path | None],
     org_roam_dir: Path,
     reading_index_file: Path | None,
     *,
@@ -244,10 +247,10 @@ def integrate_with_orgmode(
 
     for entry in entries:
         entry_id = entry.get("id")
-        if not isinstance(entry_id, int) or entry_id not in markdown_files:
+        if not isinstance(entry_id, int) or entry_id not in entry_files:
             continue
 
-        markdown_file = markdown_files[entry_id]
+        entry_file = entry_files[entry_id]
         title = str(entry.get("title") or f"Entry {entry_id}")
         url = str(entry.get("url") or "")
 
@@ -259,14 +262,14 @@ def integrate_with_orgmode(
         org_file_path = org_roam_dir / create_org_filename(title)
         attachment_file = None
 
-        if markdown_file is not None:
-            if not markdown_file.exists():
-                log(f"Markdown file not found for entry {entry_id}: {markdown_file}")
+        if entry_file is not None:
+            if not entry_file.exists():
+                log(f"Attachment source file not found for entry {entry_id}: {entry_file}")
                 continue
             try:
-                attachment_file = move_markdown_to_attachment(markdown_file, org_roam_dir, file_uuid, log)
+                attachment_file = move_file_to_attachment(entry_file, org_roam_dir, file_uuid, log)
             except Exception as exc:
-                log(f"Failed to move markdown file for entry {entry_id}: {exc}")
+                log(f"Failed to move attachment file for entry {entry_id}: {exc}")
                 continue
         else:
             log(f"Creating ref-only org-roam entry for video URL: {title}")
@@ -283,9 +286,9 @@ def integrate_with_orgmode(
             processed_ids.append(entry_id)
         except Exception as exc:
             log(f"Failed to create org file for entry {entry_id}: {exc}")
-            if attachment_file is not None and markdown_file is not None:
+            if attachment_file is not None and entry_file is not None:
                 try:
-                    move_with_retry(attachment_file, markdown_file)
+                    move_with_retry(attachment_file, entry_file)
                 except Exception:
                     pass
 

@@ -13,7 +13,7 @@ Terminal-friendly OpenClaw skill for deterministic Feedbin workflows.
 - Manage subscriptions and tagging metadata
 - Save URLs as Feedbin pages
 - Archive unread/starred entries to local Markdown folders
-- Optional org-roam integration (including ref-only notes for video URLs)
+- Optional org-roam integration (moves markdown + podcast MP3s into attachment paths, with ref-only notes for video URLs)
 
 ## Quick start
 
@@ -47,7 +47,7 @@ python3 scripts/feedbin_cli.py archive pull --ids 5132165195,5132165000 --output
 # Pull starred entries and unstar after successful archive
 python3 scripts/feedbin_cli.py archive pull --starred --unstar --max 20
 
-# Pull + create org-roam notes and move markdown into attachments
+# Pull + create org-roam notes and move markdown/podcast MP3 files into attachments
 python3 scripts/feedbin_cli.py archive pull \
   --starred \
   --org-roam ~/org-roam \

@@ -224,7 +224,7 @@ def run_pull(client: Any, args: Any) -> int:
     entries = _fetch_entries(client, entry_ids)
     feeds = _fetch_feeds(client, entries)
 
-    processed_ids, markdown_files = process_entries(
+    processed_ids, entry_files = process_entries(
         entries,
         feeds,
         output_dir,
@@ -255,7 +255,7 @@ def run_pull(client: Any, args: Any) -> int:
         org_processed = integrate_with_orgmode(
             processed_entries,
             feeds,
-            markdown_files,
+            entry_files,
             org_roam_dir,
             reading_index_file,
             log=log,
