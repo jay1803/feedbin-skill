@@ -8,7 +8,7 @@ import re
 import shutil
 import subprocess
 import unicodedata
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 VIDEO_HOSTS = {
     "youtube.com",
@@ -29,10 +29,25 @@ def is_video_url(url: str) -> bool:
     return hostname in VIDEO_HOSTS
 
 
+def normalize_media_url(url: str) -> str:
+    """Normalize common escaped URL artifacts (e.g., \? \& \= or %5C)."""
+    normalized = (url or "").strip()
+    if not normalized:
+        return normalized
+
+    # Handle shell-escaped query delimiters that leaked into stored text.
+    normalized = normalized.replace("\\?", "?").replace("\\&", "&").replace("\\=", "=")
+
+    # Handle percent-encoded backslashes in redirected URLs.
+    normalized = unquote(normalized)
+
+    return normalized
+
+
 def is_audio_url(url: str) -> bool:
     if not url:
         return False
-    path = urlparse(url).path.lower()
+    path = urlparse(normalize_media_url(url)).path.lower()
     return any(path.endswith(ext) for ext in AUDIO_EXTENSIONS)
 
 
@@ -68,8 +83,9 @@ def extract_audio_url(entry: dict) -> str | None:
             candidates.append(match)
 
     for candidate in candidates:
-        if is_audio_url(candidate):
-            return candidate
+        normalized = normalize_media_url(candidate)
+        if is_audio_url(normalized):
+            return normalized
     return None
 
 

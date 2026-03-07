@@ -9,6 +9,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
+from .content import normalize_media_url
 from .orgmode import continue_orgmode_import, integrate_with_orgmode
 from .storage import process_entries, read_blacklist
 
@@ -51,8 +52,10 @@ def download_binary_content(client: Any, media_url: str) -> bytes | None:
     if not media_url:
         return None
 
+    normalized_url = normalize_media_url(media_url)
+
     req = urllib.request.Request(
-        url=media_url,
+        url=normalized_url,
         method="GET",
         headers={
             "Authorization": client._auth_header(),
@@ -65,7 +68,21 @@ def download_binary_content(client: Any, media_url: str) -> bytes | None:
             blob = response.read()
         return blob or None
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError) as exc:
-        log(f"Failed to download media from {media_url}: {exc}")
+        # Some podcast hosts reject requests with Feedbin auth header; retry unauthenticated.
+        try:
+            req_no_auth = urllib.request.Request(
+                url=normalized_url,
+                method="GET",
+                headers={"User-Agent": "feedbin-cli/0.3"},
+            )
+            with urllib.request.urlopen(req_no_auth, timeout=client.config.timeout_sec) as response:
+                blob = response.read()
+            if blob:
+                return blob
+        except (urllib.error.URLError, urllib.error.HTTPError, ValueError):
+            pass
+
+        log(f"Failed to download media from {normalized_url}: {exc}")
         return None
 
 
