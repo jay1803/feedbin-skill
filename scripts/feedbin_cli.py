@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from downloader import workflow as archive_workflow
+
 DEFAULT_BASE_URL = "https://api.feedbin.com/v2"
 DEFAULT_TIMEOUT_SEC = 30.0
 DEFAULT_MAX_RETRIES = 3
@@ -637,6 +639,14 @@ def cmd_saved_searches_remove(client: FeedbinClient, args: argparse.Namespace) -
     return 0
 
 
+def cmd_archive_pull(client: FeedbinClient, args: argparse.Namespace) -> int:
+    return archive_workflow.run_pull(client, args)
+
+
+def cmd_archive_continue_org_roam(_client: FeedbinClient, args: argparse.Namespace) -> int:
+    return archive_workflow.run_continue_org_roam(args)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Manage Feedbin entries, subscriptions, tags, pages, and saved searches.",
@@ -820,6 +830,42 @@ def build_parser() -> argparse.ArgumentParser:
     saved_remove.add_argument("saved_search_id", type=int)
     saved_remove.add_argument("--yes", action="store_true", help="Confirm destructive action")
     saved_remove.set_defaults(handler=cmd_saved_searches_remove)
+
+    archive = top.add_parser("archive", help="Download/archive entries into markdown and optional org-roam")
+    archive_sub = archive.add_subparsers(dest="action", required=True)
+
+    archive_pull = archive_sub.add_parser("pull", help="Download unread or starred entries and archive them")
+    archive_pull.add_argument("--output", default="output", help="Directory to store downloaded markdown")
+    archive_pull.add_argument("--blacklist", help="Optional blacklist file (feed IDs or feed titles)")
+    archive_pull.add_argument("--max", type=int, default=100, help="Maximum entries to download (capped at 100)")
+    archive_pull.add_argument(
+        "--starred",
+        action="store_true",
+        help="Download starred entries instead of unread entries",
+    )
+    archive_pull.add_argument(
+        "--unstar",
+        action="store_true",
+        help="Remove stars after successful archive pull (only with --starred)",
+    )
+    archive_pull.add_argument(
+        "--org-roam",
+        help="Path to org-roam directory. Enables org-roam note creation and attachment moves.",
+    )
+    archive_pull.add_argument(
+        "--reading-index",
+        help="Optional path to reading.org; appends new HOLD entries by org-roam ID.",
+    )
+    archive_pull.set_defaults(handler=cmd_archive_pull)
+
+    archive_continue = archive_sub.add_parser(
+        "continue-org-roam",
+        help="Import existing markdown files from --output into org-roam without contacting Feedbin",
+    )
+    archive_continue.add_argument("--output", default="output", help="Directory containing markdown files")
+    archive_continue.add_argument("--org-roam", required=True, help="Path to org-roam directory")
+    archive_continue.add_argument("--reading-index", help="Optional path to reading.org")
+    archive_continue.set_defaults(handler=cmd_archive_continue_org_roam)
 
     return parser
 

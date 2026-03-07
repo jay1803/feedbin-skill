@@ -1,6 +1,6 @@
 ---
 name: feedbin-cli
-description: Manage Feedbin RSS feeds and entries through the Feedbin API, including read/unread, star/unstar, subscription CRUD, tag/tagging management, saved searches, and saving URLs as pages. Use when an agent needs deterministic terminal workflows for Feedbin triage or subscription administration. Not for non-Feedbin readers, browser-only UI automation, or unrelated inbox/newsletter tooling.
+description: Manage Feedbin RSS feeds and entries through the Feedbin API, including read/unread, star/unstar, subscription CRUD, tag/tagging management, saved searches, saved pages, and archive downloads into Markdown/org-roam. Use when an agent needs deterministic terminal workflows for Feedbin triage or archive automation. Not for non-Feedbin readers, browser-only UI automation, or unrelated inbox/newsletter tooling.
 ---
 
 # Feedbin CLI
@@ -36,7 +36,7 @@ Run a credential check first:
 python3 "$FEEDBIN_CLI" auth check
 ```
 
-## Common workflows
+## Common API workflows
 
 ### List and inspect entries
 
@@ -82,9 +82,40 @@ python3 "$FEEDBIN_CLI" pages save --url "https://example.com/article"
 python3 "$FEEDBIN_CLI" pages save --url "https://example.com/post" --title "Fallback Title"
 ```
 
+## Archive workflows
+
+### Pull unread or starred entries to Markdown
+
+```bash
+python3 "$FEEDBIN_CLI" archive pull --max 30
+python3 "$FEEDBIN_CLI" archive pull --starred --output ~/Downloads/feedbin
+python3 "$FEEDBIN_CLI" archive pull --starred --unstar --max 20
+```
+
+Behavior:
+
+- `archive pull` downloads entries to `--output` (default `output/`) grouped by feed.
+- Unread mode marks successfully archived entries as read.
+- Starred mode leaves stars by default; add `--unstar` to remove stars after successful archive.
+- `--blacklist` supports feed IDs or feed titles (one per line).
+- `--max` is capped to 100.
+
+### Org-roam integration
+
+```bash
+python3 "$FEEDBIN_CLI" archive pull --starred --org-roam ~/org-roam --reading-index ~/org/reading.org
+python3 "$FEEDBIN_CLI" archive continue-org-roam --output ~/Downloads/feedbin --org-roam ~/org-roam
+```
+
+Behavior:
+
+- `--org-roam` creates `.org` ref files and moves markdown to org-roam attachment paths.
+- Supported video URLs (e.g., YouTube) become ref-only org files when `--org-roam` is enabled.
+- `continue-org-roam` imports previously downloaded markdown files without contacting Feedbin.
+
 ## Safety rules
 
-Require `--yes` for destructive actions:
+Require `--yes` for destructive API actions:
 
 - `entries mark-read`
 - `entries unstar`
@@ -94,7 +125,10 @@ Require `--yes` for destructive actions:
 - `tags delete`
 - `saved-searches remove`
 
-Without `--yes`, the CLI fails fast and does not execute the API call.
+Archive safety notes:
+
+- `archive pull` mutates state intentionally (marks unread as read, optional unstar for starred).
+- `archive continue-org-roam` is local-file only; it does not call Feedbin.
 
 ## Selector and limit rules
 
@@ -109,9 +143,11 @@ For entry mutation commands (`mark-read`, `mark-unread`, `star`, `unstar`):
 
 ## Output behavior
 
-- Pretty JSON output by default.
+- Pretty JSON output by default for API commands.
 - ID-array responses print compact JSON arrays.
+- Archive commands emit progress logs to stderr and write markdown/org files locally.
 
 ## References
 
-Read `references/feedbin-api-map.md` for endpoint mapping, payload keys, and status behavior.
+- `references/feedbin-api-map.md` for endpoint mapping and command behavior
+- `references/archive-format.md` for archive output format and org-roam details

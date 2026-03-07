@@ -1,6 +1,10 @@
 __pycache__/
 *.pyc
 .env
+.venv/
+output/
+.pytest_cache/
+.mypy_cache/
 .DS_Store
 .skill/
 dist/

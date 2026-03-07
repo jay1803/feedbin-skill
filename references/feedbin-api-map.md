@@ -36,6 +36,36 @@
 | `saved-searches update` | PATCH | `/saved_searches/{id}.json` | `name`, `query` | Alternative: POST `/saved_searches/{id}/update.json` |
 | `saved-searches remove <id>` | DELETE | `/saved_searches/{id}.json` | none | Deletes saved search |
 
+## Archive command endpoint mapping
+
+### `archive pull`
+
+`archive pull` orchestrates multiple API calls:
+
+1. ID collection:
+   - unread mode: `GET /unread_entries.json`
+   - starred mode: `GET /starred_entries.json`
+2. Entry hydration:
+   - `GET /entries.json?ids=...`
+3. Feed metadata lookup:
+   - `GET /feeds.json?ids=...`
+4. Optional extracted content fetch:
+   - `GET <entry.extracted_content_url>` (absolute Feedbin extraction URL)
+5. Post-success mutation:
+   - unread mode: `DELETE /unread_entries.json` with `{"unread_entries": [...]}`
+   - starred + `--unstar`: `DELETE /starred_entries.json` with `{"starred_entries": [...]}`
+
+Notes:
+
+- Entry IDs are capped at 100 per run (`--max`, hard cap).
+- Only successfully processed entry IDs are mutated in step 5.
+- Blacklisted feeds/titles are skipped before mutation.
+
+### `archive continue-org-roam`
+
+- No Feedbin API calls.
+- Operates only on local markdown files already present under `--output`.
+
 ## Entry selector behavior in mutation commands
 
 Mutation commands resolve IDs from exactly one source:
