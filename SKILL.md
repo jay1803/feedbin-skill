@@ -90,6 +90,7 @@ python3 "$FEEDBIN_CLI" pages save --url "https://example.com/post" --title "Fall
 ```bash
 python3 "$FEEDBIN_CLI" archive pull --max 30
 python3 "$FEEDBIN_CLI" archive pull --starred --output ~/Downloads/feedbin
+python3 "$FEEDBIN_CLI" archive pull --ids 5132165195,5132165000 --output ~/Downloads/feedbin
 python3 "$FEEDBIN_CLI" archive pull --starred --unstar --max 20
 ```
 

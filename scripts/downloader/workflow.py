@@ -69,7 +69,29 @@ def download_binary_content(client: Any, media_url: str) -> bytes | None:
         return None
 
 
-def _fetch_entry_ids(client: Any, *, starred: bool, max_limit: int) -> list[int]:
+def _parse_explicit_ids(ids_text: str) -> list[int]:
+    values: list[int] = []
+    for piece in ids_text.split(","):
+        item = piece.strip()
+        if not item:
+            continue
+        try:
+            entry_id = int(item)
+        except ValueError as exc:
+            raise SystemExit(f"Invalid id '{item}'. IDs must be integers.") from exc
+        if entry_id <= 0:
+            raise SystemExit(f"Invalid id '{entry_id}'. IDs must be positive.")
+        values.append(entry_id)
+
+    if not values:
+        raise SystemExit("No valid IDs were provided.")
+    return list(dict.fromkeys(values))
+
+
+def _fetch_entry_ids(client: Any, *, starred: bool, max_limit: int, explicit_ids: str | None = None) -> list[int]:
+    if explicit_ids:
+        return _parse_explicit_ids(explicit_ids)[:max_limit]
+
     path = "starred_entries.json" if starred else "unread_entries.json"
     payload = client.request("GET", path)
     if not isinstance(payload, list):
@@ -113,8 +135,11 @@ def _fetch_feeds(client: Any, entries: list[dict]) -> dict[int, dict]:
 
 
 def run_pull(client: Any, args: Any) -> int:
-    if args.unstar and not args.starred:
-        raise SystemExit("--unstar can only be used with --starred")
+    if args.unstar and not args.starred and not args.ids:
+        raise SystemExit("--unstar can only be used with --starred or --ids")
+
+    if args.ids and args.starred:
+        raise SystemExit("Use either --ids or --starred, not both")
 
     requested_max = int(args.max)
     if requested_max < 1:
@@ -131,9 +156,12 @@ def run_pull(client: Any, args: Any) -> int:
     except FileNotFoundError as exc:
         raise SystemExit(str(exc)) from exc
 
-    entry_ids = _fetch_entry_ids(client, starred=bool(args.starred), max_limit=max_limit)
+    entry_ids = _fetch_entry_ids(client, starred=bool(args.starred), max_limit=max_limit, explicit_ids=args.ids)
     if not entry_ids:
-        log("No starred entries found" if args.starred else "No unread entries found")
+        if args.ids:
+            log("No matching IDs to process")
+        else:
+            log("No starred entries found" if args.starred else "No unread entries found")
         return 0
 
     entries = _fetch_entries(client, entry_ids)
@@ -177,7 +205,13 @@ def run_pull(client: Any, args: Any) -> int:
         )
         log(f"Created {len(org_processed)} org-roam files")
 
-    if args.starred:
+    if args.ids:
+        if args.unstar:
+            client.request("DELETE", "starred_entries.json", body={"starred_entries": processed_ids})
+            log(f"Unstarred {len(processed_ids)} entries")
+        else:
+            log(f"Downloaded {len(processed_ids)} entries from --ids (use --unstar to remove stars)")
+    elif args.starred:
         if args.unstar:
             client.request("DELETE", "starred_entries.json", body={"starred_entries": processed_ids})
             log(f"Unstarred {len(processed_ids)} entries")

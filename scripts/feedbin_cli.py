@@ -842,6 +842,7 @@ def build_parser() -> argparse.ArgumentParser:
     archive_pull = archive_sub.add_parser("pull", help="Download unread or starred entries and archive them")
     archive_pull.add_argument("--output", default="output", help="Directory to store downloaded markdown")
     archive_pull.add_argument("--blacklist", help="Optional blacklist file (feed IDs or feed titles)")
+    archive_pull.add_argument("--ids", help="Comma-separated entry IDs to archive directly (bypasses unread/starred fetch)")
     archive_pull.add_argument("--max", type=int, default=100, help="Maximum entries to download (capped at 100)")
     archive_pull.add_argument(
         "--starred",

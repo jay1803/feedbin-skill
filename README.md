@@ -41,6 +41,9 @@ python3 scripts/feedbin_cli.py archive pull --max 30
 # Pull starred entries and keep stars
 python3 scripts/feedbin_cli.py archive pull --starred --output ~/Downloads/feedbin
 
+# Pull specific entry IDs (same archive flow, without starred lookup)
+python3 scripts/feedbin_cli.py archive pull --ids 5132165195,5132165000 --output ~/Downloads/feedbin
+
 # Pull starred entries and unstar after successful archive
 python3 scripts/feedbin_cli.py archive pull --starred --unstar --max 20
 
