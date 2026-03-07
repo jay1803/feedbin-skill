@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feedbin CLI"
+  short_description: "Manage Feedbin RSS entries and subscriptions"
+  default_prompt: "Use $feedbin-cli to manage my Feedbin entries, stars, and subscriptions safely."
