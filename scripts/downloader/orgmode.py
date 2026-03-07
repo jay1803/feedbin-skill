@@ -34,12 +34,19 @@ def create_attachment_path(org_roam_dir: Path, file_uuid: str) -> Path:
     return org_roam_dir / "data" / first_two / rest_with_dashes
 
 
-def create_org_content(title: str, url: str, file_uuid: str) -> str:
+def create_org_content(title: str, url: str, file_uuid: str, entry_id: int | None = None) -> str:
+    refs: list[str] = []
+    if url:
+        refs.append(url)
+    if entry_id is not None:
+        refs.append(f"https://feedbin.com/entries/{entry_id}")
+    roam_refs = " ".join(refs)
+
     return "\n".join(
         [
             ":PROPERTIES:",
             f":ID:       {file_uuid}",
-            f":ROAM_REFS: {url}",
+            f":ROAM_REFS: {roam_refs}",
             ":END:",
             f"#+title: {title}",
             "#+filetags: :ref:",
@@ -57,9 +64,10 @@ def get_existing_urls(org_roam_dir: Path) -> set[str]:
             continue
         for line in content.splitlines():
             if line.startswith(":ROAM_REFS:"):
-                url = line.split(":", 2)[-1].strip()
-                if url:
-                    existing_urls.add(url)
+                refs_value = line.split(":", 2)[-1].strip()
+                if refs_value:
+                    for ref in refs_value.split():
+                        existing_urls.add(ref)
                 break
     return existing_urls
 
@@ -264,7 +272,7 @@ def integrate_with_orgmode(
             log(f"Creating ref-only org-roam entry for video URL: {title}")
 
         try:
-            org_file_path.write_text(create_org_content(title, url, file_uuid), encoding="utf-8")
+            org_file_path.write_text(create_org_content(title, url, file_uuid, entry_id), encoding="utf-8")
             log(f"Created org-roam file: {org_file_path}")
 
             if reading_index_file:
