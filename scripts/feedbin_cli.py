@@ -290,8 +290,10 @@ def load_env_file(path: str) -> None:
 
 def autoload_env() -> None:
     script_dir = Path(__file__).resolve().parent
+    skill_root = script_dir.parent
     candidates = [
-        script_dir / ".env",  # same folder as this script
+        skill_root / ".env",  # skill root (preferred)
+        script_dir / ".env",  # legacy script-local fallback
         Path.cwd() / ".env",  # current working directory
         Path.home() / ".env",  # user home fallback
     ]

@@ -26,9 +26,10 @@ Terminal-friendly OpenClaw skill for deterministic Feedbin workflows.
 
 By default, the CLI auto-loads environment variables from:
 
-1. `scripts/.env` (same folder as `feedbin_cli.py`)
-2. `./.env` (current working directory)
-3. `~/.env` (home fallback)
+1. `.env` in the skill root (`feedbin-cli/.env`) — preferred
+2. `scripts/.env` (legacy script-local fallback)
+3. `./.env` (current working directory)
+4. `~/.env` (home fallback)
 
 You can override with `--env-file /path/to/.env`.
 

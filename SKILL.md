@@ -26,7 +26,7 @@ Optional environment variables:
 
 Env loading behavior:
 
-- Auto-load `.env` from `scripts/` (same folder as `feedbin_cli.py`), then current directory, then `~/.env` (missing keys only).
+- Auto-load `.env` from the skill root first (`feedbin-cli/.env`), then `scripts/.env` as a legacy fallback, then current directory, then `~/.env` (missing keys only).
 - Start from `.env.example` in the skill root when creating your env file.
 - Pass `--env-file /path/to/.env` to load an explicit file.
 - Pass `--no-auto-env` to disable auto-loading.
