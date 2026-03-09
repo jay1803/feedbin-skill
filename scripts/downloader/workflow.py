@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import http.client
 import json
+import socket
+import ssl
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -20,6 +24,64 @@ def log(message: str) -> None:
     print(message, file=sys.stderr)
 
 
+def _is_retryable_download_error(exc: Exception) -> bool:
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code in {408, 425, 429, 500, 502, 503, 504}
+
+    reason = getattr(exc, "reason", exc)
+    reason_text = str(reason).lower()
+    retry_signatures = (
+        "unexpected_eof_while_reading",
+        "eof occurred in violation of protocol",
+        "ssl",
+        "tls",
+        "timed out",
+        "timeout",
+        "connection reset",
+        "connection aborted",
+        "temporarily unavailable",
+        "remote end closed connection without response",
+        "incompleteread",
+    )
+
+    direct_retryable = isinstance(
+        exc,
+        (
+            TimeoutError,
+            ConnectionError,
+            ConnectionResetError,
+            ConnectionAbortedError,
+            BrokenPipeError,
+            EOFError,
+            ssl.SSLError,
+            socket.timeout,
+            http.client.IncompleteRead,
+        ),
+    )
+    return direct_retryable or any(sig in reason_text for sig in retry_signatures)
+
+
+def _read_url_bytes(req: urllib.request.Request, client: Any) -> bytes:
+    attempts = max(1, int(getattr(client.config, "max_retries", 1) or 1))
+    backoff_base = float(getattr(client.config, "retry_backoff_sec", 0.8) or 0.8)
+    timeout = float(getattr(client.config, "timeout_sec", 30.0) or 30.0)
+
+    last_error: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as response:
+                return response.read()
+        except Exception as exc:  # noqa: BLE001 - urlopen can raise EOF/SSL/socket variants directly
+            last_error = exc
+            is_last_attempt = attempt >= attempts
+            if is_last_attempt or not _is_retryable_download_error(exc):
+                break
+            time.sleep(backoff_base * (2 ** (attempt - 1)))
+
+    assert last_error is not None
+    raise last_error
+
+
 def fetch_extracted_content(client: Any, extracted_url: str) -> str | None:
     if not extracted_url:
         return None
@@ -34,8 +96,7 @@ def fetch_extracted_content(client: Any, extracted_url: str) -> str | None:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=client.config.timeout_sec) as response:
-            raw = response.read().decode("utf-8").strip()
+        raw = _read_url_bytes(req, client).decode("utf-8").strip()
         if not raw:
             return None
         payload = json.loads(raw)
@@ -43,7 +104,9 @@ def fetch_extracted_content(client: Any, extracted_url: str) -> str | None:
             content = payload.get("content")
             if isinstance(content, str):
                 return content
-    except (urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, ValueError) as exc:
+    except (json.JSONDecodeError, ValueError) as exc:
+        log(f"Failed to parse extracted content from {extracted_url}: {exc}")
+    except Exception as exc:  # noqa: BLE001 - keep archive pull resilient to transient download issues
         log(f"Failed to fetch extracted content from {extracted_url}: {exc}")
     return None
 
@@ -64,10 +127,9 @@ def download_binary_content(client: Any, media_url: str) -> bytes | None:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=client.config.timeout_sec) as response:
-            blob = response.read()
+        blob = _read_url_bytes(req, client)
         return blob or None
-    except (urllib.error.URLError, urllib.error.HTTPError, ValueError) as exc:
+    except Exception as auth_exc:  # noqa: BLE001 - preserve archive flow on flaky media hosts
         # Some podcast hosts reject requests with Feedbin auth header; retry unauthenticated.
         try:
             req_no_auth = urllib.request.Request(
@@ -75,14 +137,17 @@ def download_binary_content(client: Any, media_url: str) -> bytes | None:
                 method="GET",
                 headers={"User-Agent": "feedbin-cli/0.3"},
             )
-            with urllib.request.urlopen(req_no_auth, timeout=client.config.timeout_sec) as response:
-                blob = response.read()
+            blob = _read_url_bytes(req_no_auth, client)
             if blob:
                 return blob
-        except (urllib.error.URLError, urllib.error.HTTPError, ValueError):
-            pass
+        except Exception as no_auth_exc:  # noqa: BLE001 - keep archive pull resilient
+            log(
+                f"Failed to download media from {normalized_url}: "
+                f"auth attempt={_summarize_error(auth_exc)}; unauth attempt={_summarize_error(no_auth_exc)}"
+            )
+            return None
 
-        log(f"Failed to download media from {normalized_url}: {exc}")
+        log(f"Failed to download media from {normalized_url}: {_summarize_error(auth_exc)}")
         return None
 
 

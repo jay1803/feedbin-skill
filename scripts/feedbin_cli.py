@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import base64
+import http.client
 import json
 import os
 import shlex
+import socket
+import ssl
 import sys
 import time
 import urllib.error
@@ -74,8 +77,59 @@ class FeedbinClient:
             "timed out",
             "connection reset",
             "temporarily unavailable",
+            "incompleteread",
+            "connection aborted",
+            "remote end closed connection without response",
         )
         return any(sig in reason_text for sig in retry_signatures)
+
+    def _is_retryable_request_error(self, exc: Exception) -> bool:
+        if isinstance(exc, urllib.error.URLError):
+            return self._is_retryable_url_error(exc)
+        if isinstance(exc, urllib.error.HTTPError):
+            return exc.code in {408, 425, 429, 500, 502, 503, 504}
+        if isinstance(
+            exc,
+            (
+                TimeoutError,
+                ConnectionError,
+                ConnectionResetError,
+                ConnectionAbortedError,
+                BrokenPipeError,
+                EOFError,
+                ssl.SSLError,
+                socket.timeout,
+                http.client.IncompleteRead,
+                OSError,
+            ),
+        ):
+            reason_text = str(exc).lower()
+            retry_signatures = (
+                "unexpected_eof_while_reading",
+                "eof occurred in violation of protocol",
+                "ssl",
+                "tls",
+                "timed out",
+                "timeout",
+                "connection reset",
+                "connection aborted",
+                "temporarily unavailable",
+                "remote end closed connection without response",
+            )
+            return any(sig in reason_text for sig in retry_signatures) or isinstance(
+                exc,
+                (
+                    TimeoutError,
+                    ConnectionResetError,
+                    ConnectionAbortedError,
+                    BrokenPipeError,
+                    EOFError,
+                    ssl.SSLError,
+                    socket.timeout,
+                    http.client.IncompleteRead,
+                ),
+            )
+        return False
 
     def request(
         self,
@@ -104,7 +158,7 @@ class FeedbinClient:
         )
 
         attempts = max(1, self.config.max_retries)
-        last_url_error: urllib.error.URLError | None = None
+        last_error: Exception | None = None
 
         for attempt in range(1, attempts + 1):
             try:
@@ -119,22 +173,28 @@ class FeedbinClient:
                     except json.JSONDecodeError:
                         return raw
             except urllib.error.HTTPError as exc:
-                detail = ""
-                if exc.fp:
-                    payload_text = exc.fp.read().decode("utf-8", errors="replace").strip()
-                    if payload_text:
-                        detail = f": {payload_text}"
-                raise CliError(f"HTTP {exc.code} {exc.reason}{detail}") from exc
-            except urllib.error.URLError as exc:
-                last_url_error = exc
+                last_error = exc
                 is_last_attempt = attempt >= attempts
-                if is_last_attempt or not self._is_retryable_url_error(exc):
+                if is_last_attempt or not self._is_retryable_request_error(exc):
+                    detail = ""
+                    if exc.fp:
+                        payload_text = exc.fp.read().decode("utf-8", errors="replace").strip()
+                        if payload_text:
+                            detail = f": {payload_text}"
+                    raise CliError(f"HTTP {exc.code} {exc.reason}{detail}") from exc
+                backoff = self.config.retry_backoff_sec * (2 ** (attempt - 1))
+                time.sleep(backoff)
+            except Exception as exc:  # noqa: BLE001 - network stack may raise non-URLError EOF/SSL exceptions
+                last_error = exc
+                is_last_attempt = attempt >= attempts
+                if is_last_attempt or not self._is_retryable_request_error(exc):
                     break
                 backoff = self.config.retry_backoff_sec * (2 ** (attempt - 1))
                 time.sleep(backoff)
 
-        if last_url_error is not None:
-            raise CliError(f"Request failed after {attempts} attempt(s): {last_url_error.reason}") from last_url_error
+        if last_error is not None:
+            detail = getattr(last_error, "reason", last_error)
+            raise CliError(f"Request failed after {attempts} attempt(s): {detail}") from last_error
 
         raise CliError("Request failed for an unknown reason")
 
