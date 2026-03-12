@@ -50,6 +50,28 @@ def ensure_unique_file_path(directory: Path, base_name: str, extension: str) -> 
     return target
 
 
+def find_existing_files(directory: Path, base_name: str, extension: str) -> list[Path]:
+    """Return matching files without using glob patterns derived from entry titles.
+
+    Some Feedbin titles contain square brackets like ``[Text-to-Logo]``. Feeding those
+    strings into ``Path.glob(f"{base_name}*.md")`` makes pathlib treat them as glob
+    character classes, which can explode with ``re.error: bad character range ...``.
+    Prefix matching keeps the lookup literal.
+    """
+    ext = extension if extension.startswith(".") else f".{extension}"
+    matches: list[Path] = []
+
+    for candidate in directory.iterdir():
+        if not candidate.is_file():
+            continue
+        if candidate.suffix.lower() != ext.lower():
+            continue
+        if candidate.stem == base_name or candidate.stem.startswith(f"{base_name}-"):
+            matches.append(candidate)
+
+    return sorted(matches)
+
+
 def process_entries(
     entries: list[dict],
     feeds: dict[int, dict],
@@ -96,7 +118,7 @@ def process_entries(
 
         audio_url = extract_audio_url(entry)
         if audio_url:
-            existing_audio = list(directory.glob(f"{base_name}*.mp3"))
+            existing_audio = find_existing_files(directory, base_name, ".mp3")
             if existing_audio:
                 log(f"Using existing podcast file for entry {entry_id}: {existing_audio[0]}")
                 processed.append(entry_id)
@@ -119,7 +141,7 @@ def process_entries(
             entry_files[entry_id] = audio_target
             continue
 
-        existing = list(directory.glob(f"{base_name}*.md"))
+        existing = find_existing_files(directory, base_name, ".md")
         if existing:
             target_path = existing[0]
             log(f"Using existing file for entry {entry_id}: {target_path}")
