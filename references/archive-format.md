@@ -73,7 +73,7 @@ Optional reading index:
 Duplicate handling:
 
 - Existing `:ROAM_REFS:` URLs in existing org files are detected.
-- If URL already exists, entry is skipped for org import.
+- If URL already exists, entry is skipped for org import and the duplicate file left in `--output` is deleted.
 
 ## Video URL ref-only behavior
 

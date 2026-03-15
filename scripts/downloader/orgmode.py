@@ -151,6 +151,18 @@ def move_file_to_attachment(source_file: Path, org_roam_dir: Path, file_uuid: st
     return attachment_file
 
 
+def delete_duplicate_output_file(file_path: Path, log: Callable[[str], None]) -> None:
+    try:
+        if not file_path.exists():
+            log(f"Duplicate output file already missing, nothing to delete: {file_path}")
+            return
+        file_path.unlink()
+        log(f"Deleted duplicate output file: {file_path}")
+    except OSError as exc:
+        log(f"Failed to delete duplicate output file {file_path}: {exc}")
+
+
+
 def extract_markdown_metadata(markdown_file: Path, log: Callable[[str], None]) -> dict[str, str] | None:
     try:
         content = markdown_file.read_text(encoding="utf-8")
@@ -203,7 +215,8 @@ def continue_orgmode_import(
         url = metadata["url"]
 
         if url and url in existing_urls:
-            log(f"Skipping duplicate article: {title} ({url})")
+            log(f"Skipping duplicate article already present in org-roam: {title} ({url})")
+            delete_duplicate_output_file(markdown_file, log)
             continue
 
         file_uuid = generate_uuid()
@@ -255,7 +268,9 @@ def integrate_with_orgmode(
         url = str(entry.get("url") or "")
 
         if url and url in existing_urls:
-            log(f"Skipping duplicate article: {title} ({url})")
+            log(f"Skipping duplicate article already present in org-roam: {title} ({url})")
+            if entry_file is not None:
+                delete_duplicate_output_file(entry_file, log)
             continue
 
         file_uuid = generate_uuid()
