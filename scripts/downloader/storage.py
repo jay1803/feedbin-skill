@@ -7,6 +7,8 @@ from typing import Callable
 
 from .content import build_article_content, extract_audio_url, is_video_url, slugify
 
+EntryOutput = list[Path]
+
 
 def read_blacklist(path: Path | None) -> tuple[set[int], set[str]]:
     ids: set[int] = set()
@@ -83,9 +85,9 @@ def process_entries(
     download_binary: Callable[[str], bytes | None] | None = None,
     log: Callable[[str], None],
     video_ref_only: bool = False,
-) -> tuple[list[int], dict[int, Path | None]]:
+) -> tuple[list[int], dict[int, EntryOutput | None]]:
     processed: list[int] = []
-    entry_files: dict[int, Path | None] = {}
+    entry_files: dict[int, EntryOutput | None] = {}
 
     for entry in entries:
         entry_id = entry.get("id")
@@ -116,53 +118,47 @@ def process_entries(
         title = str(entry.get("title") or f"Entry {entry_id}")
         base_name = slugify(title, f"entry-{entry_id}")
 
+        output_files: EntryOutput = []
+
         audio_url = extract_audio_url(entry)
         if audio_url:
             existing_audio = find_existing_files(directory, base_name, ".mp3")
             if existing_audio:
                 log(f"Using existing podcast file for entry {entry_id}: {existing_audio[0]}")
-                processed.append(entry_id)
-                entry_files[entry_id] = existing_audio[0]
-                continue
-
-            if download_binary is None:
-                log(f"Skipping podcast entry {entry_id}; no binary downloader available: {audio_url}")
-                continue
-
-            audio_bytes = download_binary(audio_url)
-            if not audio_bytes:
-                log(f"Failed to download podcast audio for entry {entry_id}: {audio_url}")
-                continue
-
-            audio_target = ensure_unique_file_path(directory, base_name, ".mp3")
-            audio_target.write_bytes(audio_bytes)
-            log(f"Saved podcast entry {entry_id} -> {audio_target}")
-            processed.append(entry_id)
-            entry_files[entry_id] = audio_target
-            continue
+                output_files.append(existing_audio[0])
+            elif download_binary is None:
+                log(f"Skipping podcast download for entry {entry_id}; no binary downloader available: {audio_url}")
+            else:
+                audio_bytes = download_binary(audio_url)
+                if not audio_bytes:
+                    log(f"Failed to download podcast audio for entry {entry_id}: {audio_url}")
+                else:
+                    audio_target = ensure_unique_file_path(directory, base_name, ".mp3")
+                    audio_target.write_bytes(audio_bytes)
+                    log(f"Saved podcast entry {entry_id} -> {audio_target}")
+                    output_files.append(audio_target)
 
         existing = find_existing_files(directory, base_name, ".md")
         if existing:
             target_path = existing[0]
             log(f"Using existing file for entry {entry_id}: {target_path}")
-            processed.append(entry_id)
-            entry_files[entry_id] = target_path
-            continue
+            output_files.append(target_path)
+        else:
+            target_path = ensure_unique_path(directory, base_name)
 
-        target_path = ensure_unique_path(directory, base_name)
+            extracted_content = None
+            extracted_url = entry.get("extracted_content_url")
+            if fetch_extracted and isinstance(extracted_url, str) and extracted_url:
+                extracted_content = fetch_extracted(extracted_url)
+                if extracted_content:
+                    log(f"Using extracted content for entry {entry_id}")
 
-        extracted_content = None
-        extracted_url = entry.get("extracted_content_url")
-        if fetch_extracted and isinstance(extracted_url, str) and extracted_url:
-            extracted_content = fetch_extracted(extracted_url)
-            if extracted_content:
-                log(f"Using extracted content for entry {entry_id}")
-
-        document = build_article_content(entry, feed, extracted_content)
-        target_path.write_text(document, encoding="utf-8")
-        log(f"Saved entry {entry_id} -> {target_path}")
+            document = build_article_content(entry, feed, extracted_content)
+            target_path.write_text(document, encoding="utf-8")
+            log(f"Saved entry {entry_id} -> {target_path}")
+            output_files.append(target_path)
 
         processed.append(entry_id)
-        entry_files[entry_id] = target_path
+        entry_files[entry_id] = output_files
 
     return processed, entry_files

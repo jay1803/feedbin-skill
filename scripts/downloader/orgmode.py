@@ -162,6 +162,10 @@ def delete_duplicate_output_file(file_path: Path, log: Callable[[str], None]) ->
         log(f"Failed to delete duplicate output file {file_path}: {exc}")
 
 
+def delete_duplicate_output_files(files: list[Path], log: Callable[[str], None]) -> None:
+    for file_path in files:
+        delete_duplicate_output_file(file_path, log)
+
 
 def extract_markdown_metadata(markdown_file: Path, log: Callable[[str], None]) -> dict[str, str] | None:
     try:
@@ -248,7 +252,7 @@ def continue_orgmode_import(
 def integrate_with_orgmode(
     entries: list[dict],
     feeds: dict[int, dict],
-    entry_files: dict[int, Path | None],
+    entry_files: dict[int, list[Path] | None],
     org_roam_dir: Path,
     reading_index_file: Path | None,
     *,
@@ -263,28 +267,39 @@ def integrate_with_orgmode(
         if not isinstance(entry_id, int) or entry_id not in entry_files:
             continue
 
-        entry_file = entry_files[entry_id]
+        entry_file_list = entry_files[entry_id]
         title = str(entry.get("title") or f"Entry {entry_id}")
         url = str(entry.get("url") or "")
 
         if url and url in existing_urls:
             log(f"Skipping duplicate article already present in org-roam: {title} ({url})")
-            if entry_file is not None:
-                delete_duplicate_output_file(entry_file, log)
+            if entry_file_list is not None:
+                delete_duplicate_output_files(entry_file_list, log)
             continue
 
         file_uuid = generate_uuid()
         org_file_path = org_roam_dir / create_org_filename(title)
-        attachment_file = None
+        attachment_moves: list[tuple[Path, Path]] = []
 
-        if entry_file is not None:
-            if not entry_file.exists():
-                log(f"Attachment source file not found for entry {entry_id}: {entry_file}")
+        if entry_file_list is not None:
+            missing_files = [entry_file for entry_file in entry_file_list if not entry_file.exists()]
+            if missing_files:
+                log(
+                    f"Attachment source file(s) not found for entry {entry_id}: "
+                    + ", ".join(str(path) for path in missing_files)
+                )
                 continue
             try:
-                attachment_file = move_file_to_attachment(entry_file, org_roam_dir, file_uuid, log)
+                for entry_file in entry_file_list:
+                    attachment_file = move_file_to_attachment(entry_file, org_roam_dir, file_uuid, log)
+                    attachment_moves.append((entry_file, attachment_file))
             except Exception as exc:
                 log(f"Failed to move attachment file for entry {entry_id}: {exc}")
+                for original_file, attachment_file in reversed(attachment_moves):
+                    try:
+                        move_with_retry(attachment_file, original_file)
+                    except Exception:
+                        pass
                 continue
         else:
             log(f"Creating ref-only org-roam entry for video URL: {title}")
@@ -301,9 +316,9 @@ def integrate_with_orgmode(
             processed_ids.append(entry_id)
         except Exception as exc:
             log(f"Failed to create org file for entry {entry_id}: {exc}")
-            if attachment_file is not None and entry_file is not None:
+            for original_file, attachment_file in reversed(attachment_moves):
                 try:
-                    move_with_retry(attachment_file, entry_file)
+                    move_with_retry(attachment_file, original_file)
                 except Exception:
                     pass
 

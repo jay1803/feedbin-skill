@@ -49,10 +49,12 @@ Pandoc behavior:
 When `--org-roam` is provided:
 
 1. Markdown files are created first (except video ref-only cases).
-2. For each processed entry, an org-roam `.org` note is created at:
+2. Audio entries keep both outputs locally during archive: the article markdown plus the podcast `.mp3` when one is available.
+3. For each processed entry, an org-roam `.org` note is created at:
    - `<org-roam>/<timestamp>-<slug>.org`
-3. Markdown files are moved into org-roam attachment storage:
+4. All archived files for that entry are moved into the same org-roam attachment directory:
    - `<org-roam>/data/<first-two-uuid-chars>/<remaining-uuid-with-dashes>/<markdown-file>`
+   - `<org-roam>/data/<first-two-uuid-chars>/<remaining-uuid-with-dashes>/<podcast-file>.mp3`
 
 Org file content:
 
